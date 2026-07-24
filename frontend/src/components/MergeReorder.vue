@@ -282,6 +282,8 @@ function onPointerDown(e) {
         currentX: 0,
         currentY: 0,
       };
+    } else if (!started) {
+      previewPage.value = pages.value[index];
     }
   }
 
