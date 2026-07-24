@@ -11,6 +11,10 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))
 CLEANUP_INTERVAL = int(os.getenv("CLEANUP_INTERVAL", 1800))
 FILE_TTL = int(os.getenv("FILE_TTL", 86400))
 
+BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8000))
+RATE_LIMIT_DELAY = float(os.getenv("RATE_LIMIT_DELAY", 1.0))
+RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", 5))
+
 SUPPORTED_PDF_MIME = "application/pdf"
 SUPPORTED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/tiff", "image/bmp"}
 SUPPORTED_DOC_MIMES = {
