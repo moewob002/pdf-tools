@@ -101,8 +101,8 @@ cd pdf-tools
 docker-compose up --build
 ```
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
+- Frontend: http://localhost:3000 (configurable via `FRONTEND_PORT`)
+- Backend API: http://localhost:8000 (configurable via `BACKEND_PORT`)
 
 ### Option 2: Direct Run
 
@@ -120,7 +120,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Backend runs at http://localhost:8000
+Backend runs at http://localhost:8000 (configurable via `BACKEND_PORT`)
 
 **Frontend:**
 
@@ -211,6 +211,8 @@ All settings are in `config.env`:
 | `FILE_TTL` | `86400` | Temp file time-to-live (24 hours) |
 | `RATE_LIMIT_DELAY` | `1.0` | Minimum seconds between requests per IP |
 | `RATE_LIMIT_MAX` | `5` | Max requests per 10-second window |
+| `BACKEND_PORT` | `8000` | Backend server port |
+| `FRONTEND_PORT` | `3000` | Frontend server port (Docker only) |
 
 ## Adding a New OCR Backend
 
@@ -259,3 +261,7 @@ OCR_BACKEND=my_ocr
 - File uploads are limited to 50MB
 - Input validation on all endpoints
 - Built-in rate limiting (1s delay, 5 req/10s per IP)
+
+## Built With AI
+
+This entire repository was generated with [opencode](https://opencode.ai) — an AI-powered coding assistant. All code, configuration, documentation, and project structure were produced through AI-assisted development.
