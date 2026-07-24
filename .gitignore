@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Build
+frontend/dist/
+*.egg-info/
+
+# Temp files
+backend/temp/
+frontend/temp/
+
+# Env
+.env
+config.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
