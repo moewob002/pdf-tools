@@ -3,9 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f6fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0f24" media="(prefers-color-scheme: dark)" />
     <title>PDF Tools</title>
+    <script>
+      // Apply the theme before first paint so there is no flash of the wrong theme.
+      // Keep in sync with src/utils/theme.js (THEME_STORAGE_KEY, resolveTheme).
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem("pdf-tools-theme");
+        } catch (e) {}
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var theme = stored === "light" || stored === "dark" ? stored : prefersDark ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
-  <body class="bg-gray-100 min-h-screen">
+  <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
