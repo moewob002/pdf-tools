@@ -6,6 +6,7 @@ from PIL import Image
 from pdf2image import convert_from_bytes
 from pypdf import PdfReader, PdfWriter
 
+from ..errors import UserInputError
 from ..utils.file_utils import create_temp_dir, save_upload
 
 
@@ -143,9 +144,15 @@ async def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
     job_dir = create_temp_dir("convert")
     docx_path = save_upload(file_bytes, filename, job_dir)
 
-    doc = Document(str(docx_path))
+    try:
+        doc = Document(str(docx_path))
+    except Exception:
+        raise UserInputError(
+            "The Word document could not be read. It may be damaged or not a .docx file."
+        ) from None
 
     from fpdf import FPDF
+    from fpdf.errors import FPDFUnicodeEncodingException
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -168,12 +175,19 @@ async def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
             job_dir,
         )
 
-    for para in doc.paragraphs:
-        if para.text.strip():
-            if pdf.pages_count == 0 or pdf.get_y() > 270:
-                pdf.add_page()
-            pdf.set_font("Helvetica", size=11)
-            pdf.multi_cell(0, 10, para.text)
+    try:
+        for para in doc.paragraphs:
+            if para.text.strip():
+                if pdf.pages_count == 0 or pdf.get_y() > 270:
+                    pdf.add_page()
+                pdf.set_font("Helvetica", size=11)
+                pdf.multi_cell(0, 10, para.text)
+    except FPDFUnicodeEncodingException:
+        raise UserInputError(
+            "This document contains characters (for example non-Latin scripts or "
+            "typographic quotes) that Word to PDF conversion does not support yet.",
+            status_code=422,
+        ) from None
 
     if pdf.pages_count == 0:
         pdf.add_page()

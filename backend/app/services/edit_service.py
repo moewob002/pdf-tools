@@ -4,26 +4,9 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
+from ..errors import UserInputError
 from ..utils.file_utils import create_temp_dir, save_upload
-
-
-def _parse_page_ranges(ranges_str: str, total_pages: int) -> list[int]:
-    pages = set()
-    for part in ranges_str.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if "-" in part:
-            start, end = part.split("-", 1)
-            start, end = int(start), int(end)
-            for p in range(start, min(end, total_pages) + 1):
-                if 1 <= p <= total_pages:
-                    pages.add(p - 1)
-        else:
-            p = int(part)
-            if 1 <= p <= total_pages:
-                pages.add(p - 1)
-    return sorted(pages)
+from ..utils.validation import parse_page_ranges
 
 
 async def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
@@ -32,10 +15,10 @@ async def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
 
     reader = PdfReader(str(pdf_path))
     total = len(reader.pages)
-    indices = _parse_page_ranges(page_ranges, total)
+    indices = parse_page_ranges(page_ranges, total)
 
     if not indices:
-        raise ValueError(f"No valid pages found. Total pages: {total}")
+        raise UserInputError(f"No valid pages selected. This PDF has {total} page(s).")
 
     output_dir = job_dir / "output"
     output_dir.mkdir(exist_ok=True)
@@ -105,7 +88,7 @@ async def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Pa
 
     reader = PdfReader(str(pdf_path))
     total = len(reader.pages)
-    remove_indices = set(_parse_page_ranges(page_ranges, total))
+    remove_indices = set(parse_page_ranges(page_ranges, total))
 
     writer = PdfWriter()
     for i, page in enumerate(reader.pages):
