@@ -1,75 +1,57 @@
+import base64
 import io
 import zipfile
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
-from ..utils.file_utils import create_temp_dir, save_upload
+from ..errors import UserInputError
+from ..utils.file_utils import remove_job_dir, save_upload, temp_job
+from ..utils.pdf_render import iter_page_images
+from ..utils.validation import parse_page_ranges
 
 
-def _parse_page_ranges(ranges_str: str, total_pages: int) -> list[int]:
-    pages = set()
-    for part in ranges_str.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if "-" in part:
-            start, end = part.split("-", 1)
-            start, end = int(start), int(end)
-            for p in range(start, min(end, total_pages) + 1):
-                if 1 <= p <= total_pages:
-                    pages.add(p - 1)
-        else:
-            p = int(part)
-            if 1 <= p <= total_pages:
-                pages.add(p - 1)
-    return sorted(pages)
+def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
+    with temp_job("split") as job_dir:
+        pdf_path = save_upload(file_bytes, filename, job_dir)
+
+        reader = PdfReader(str(pdf_path))
+        total = len(reader.pages)
+        indices = parse_page_ranges(page_ranges, total)
+
+        if not indices:
+            raise UserInputError(f"No valid pages selected. This PDF has {total} page(s).")
+
+        zip_path = job_dir / "split_output.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for idx in indices:
+                writer = PdfWriter()
+                writer.add_page(reader.pages[idx])
+                buf = io.BytesIO()
+                writer.write(buf)
+                buf.seek(0)
+                zf.writestr(f"page_{idx + 1}.pdf", buf.read())
+
+        return zip_path
 
 
-async def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
-    job_dir = create_temp_dir("split")
-    pdf_path = save_upload(file_bytes, filename, job_dir)
+def merge_pdfs(files: list[tuple[bytes, str]]) -> Path:
+    with temp_job("merge") as job_dir:
+        writer = PdfWriter()
 
-    reader = PdfReader(str(pdf_path))
-    total = len(reader.pages)
-    indices = _parse_page_ranges(page_ranges, total)
+        for file_bytes, filename in files:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            for page in reader.pages:
+                writer.add_page(page)
 
-    if not indices:
-        raise ValueError(f"No valid pages found. Total pages: {total}")
+        output_path = job_dir / "merged.pdf"
+        with open(output_path, "wb") as f:
+            writer.write(f)
 
-    output_dir = job_dir / "output"
-    output_dir.mkdir(exist_ok=True)
-
-    zip_path = job_dir / "split_output.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for idx in indices:
-            writer = PdfWriter()
-            writer.add_page(reader.pages[idx])
-            buf = io.BytesIO()
-            writer.write(buf)
-            buf.seek(0)
-            zf.writestr(f"page_{idx + 1}.pdf", buf.read())
-
-    return zip_path
+        return output_path
 
 
-async def merge_pdfs(files: list[tuple[bytes, str]]) -> Path:
-    job_dir = create_temp_dir("merge")
-    writer = PdfWriter()
-
-    for file_bytes, filename in files:
-        reader = PdfReader(io.BytesIO(file_bytes))
-        for page in reader.pages:
-            writer.add_page(page)
-
-    output_path = job_dir / "merged.pdf"
-    with open(output_path, "wb") as f:
-        writer.write(f)
-
-    return output_path
-
-
-async def merge_custom_pages(
+def merge_custom_pages(
     files: list[tuple[bytes, str]],
     page_order: list[dict],
 ) -> Path:
@@ -77,51 +59,64 @@ async def merge_custom_pages(
     page_order: [{"file_index": 0, "page": 1}, {"file_index": 1, "page": 3}, ...]
     page numbers are 1-indexed.
     """
-    job_dir = create_temp_dir("merge")
+    with temp_job("merge") as job_dir:
+        readers = []
+        for file_bytes, filename in files:
+            readers.append(PdfReader(io.BytesIO(file_bytes)))
 
-    readers = []
-    for file_bytes, filename in files:
-        readers.append(PdfReader(io.BytesIO(file_bytes)))
+        writer = PdfWriter()
+        for item in page_order:
+            file_idx = item["file_index"]
+            page_num = item["page"]  # 1-indexed
+            if 0 <= file_idx < len(readers):
+                reader = readers[file_idx]
+                if 1 <= page_num <= len(reader.pages):
+                    writer.add_page(reader.pages[page_num - 1])
 
-    writer = PdfWriter()
-    for item in page_order:
-        file_idx = item["file_index"]
-        page_num = item["page"]  # 1-indexed
-        if 0 <= file_idx < len(readers):
-            reader = readers[file_idx]
-            if 1 <= page_num <= len(reader.pages):
-                writer.add_page(reader.pages[page_num - 1])
+        output_path = job_dir / "merged.pdf"
+        with open(output_path, "wb") as f:
+            writer.write(f)
 
-    output_path = job_dir / "merged.pdf"
-    with open(output_path, "wb") as f:
-        writer.write(f)
-
-    return output_path
-
-
-async def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
-    job_dir = create_temp_dir("delete")
-    pdf_path = save_upload(file_bytes, filename, job_dir)
-
-    reader = PdfReader(str(pdf_path))
-    total = len(reader.pages)
-    remove_indices = set(_parse_page_ranges(page_ranges, total))
-
-    writer = PdfWriter()
-    for i, page in enumerate(reader.pages):
-        if i not in remove_indices:
-            writer.add_page(page)
-
-    output_path = job_dir / f"removed_{page_ranges.replace(',', '_').replace('-', 'to')}.pdf"
-    with open(output_path, "wb") as f:
-        writer.write(f)
-
-    return output_path
+        return output_path
 
 
-async def get_pdf_info(file_bytes: bytes) -> dict:
+def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
+    with temp_job("delete") as job_dir:
+        pdf_path = save_upload(file_bytes, filename, job_dir)
+
+        reader = PdfReader(str(pdf_path))
+        total = len(reader.pages)
+        remove_indices = set(parse_page_ranges(page_ranges, total))
+
+        writer = PdfWriter()
+        for i, page in enumerate(reader.pages):
+            if i not in remove_indices:
+                writer.add_page(page)
+
+        # Fixed internal name: user input never becomes part of a server path.
+        output_path = job_dir / "removed_pages.pdf"
+        with open(output_path, "wb") as f:
+            writer.write(f)
+
+        return output_path
+
+
+def get_pdf_info(file_bytes: bytes) -> dict:
     reader = PdfReader(io.BytesIO(file_bytes))
     return {
         "total_pages": len(reader.pages),
         "metadata": reader.metadata,
     }
+
+
+def render_thumbnails(file_bytes: bytes, dpi: int) -> dict:
+    """JPEG thumbnails of every page, base64-encoded for the JSON response."""
+    with temp_job("thumbs") as job_dir:
+        pdf_path = save_upload(file_bytes, "upload.pdf", job_dir)
+        pages = []
+        for i, img in enumerate(iter_page_images(pdf_path, dpi=dpi, fmt="JPEG")):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=75)
+            pages.append({"page": i + 1, "image": base64.b64encode(buf.getvalue()).decode()})
+    remove_job_dir(job_dir)
+    return {"total_pages": len(pages), "pages": pages}

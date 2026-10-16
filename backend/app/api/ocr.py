@@ -1,11 +1,23 @@
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from pathlib import Path
 
-from ..services.ocr_service import extract_text_from_pdf, make_selectable_pdf
+from fastapi import APIRouter, File, Form, UploadFile
+
+from ..errors import UserInputError
 from ..ocr.factory import get_ocr_backend
-from ..config import MAX_FILE_SIZE
+from ..services.ocr_service import extract_text_from_pdf, make_selectable_pdf
+from ..utils.processing import run_processing
+from ..utils.responses import job_file_response
+from ..utils.validation import display_name, read_pdf_upload, validate_ocr_language
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
+
+
+def _validate_ocr_options(language: str, backend: str | None) -> None:
+    try:
+        ocr = get_ocr_backend(backend)
+    except ValueError as e:
+        raise UserInputError(str(e)) from None
+    validate_ocr_language(language, ocr.get_supported_languages())
 
 
 @router.post("/extract-text")
@@ -14,23 +26,12 @@ async def ocr_extract_text(
     language: str = Form("eng"),
     backend: str | None = Form(None),
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "File must be a PDF")
+    _validate_ocr_options(language, backend)
+    data = await read_pdf_upload(file)
 
-    data = await file.read()
-    if len(data) > MAX_FILE_SIZE:
-        raise HTTPException(413, "File too large (max 50MB)")
-
-    try:
-        result = await extract_text_from_pdf(
-            data, file.filename, language=language, backend_name=backend
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"OCR processing failed: {str(e)}")
-
-    return result
+    return await run_processing(extract_text_from_pdf, 
+        data, file.filename, language=language, backend_name=backend
+    )
 
 
 @router.post("/make-selectable")
@@ -39,27 +40,16 @@ async def ocr_make_selectable(
     language: str = Form("eng"),
     backend: str | None = Form(None),
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "File must be a PDF")
+    _validate_ocr_options(language, backend)
+    data = await read_pdf_upload(file)
 
-    data = await file.read()
-    if len(data) > MAX_FILE_SIZE:
-        raise HTTPException(413, "File too large (max 50MB)")
-
-    try:
-        pdf_path = await make_selectable_pdf(
-            data, file.filename, language=language, backend_name=backend
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"OCR processing failed: {str(e)}")
-
-    from pathlib import Path
-    return FileResponse(
+    pdf_path = await run_processing(make_selectable_pdf, 
+        data, file.filename, language=language, backend_name=backend
+    )
+    return job_file_response(
         pdf_path,
         media_type="application/pdf",
-        filename=f"selectable_{Path(file.filename).stem}.pdf",
+        filename=f"selectable_{Path(display_name(file.filename)).stem}.pdf",
     )
 
 

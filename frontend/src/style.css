@@ -1,3 +1,252 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design tokens — "Vibrant Color Systems & Chromatic Expression".
+ * Colours are RGB channel triplets so Tailwind can apply opacity (bg-primary/10).
+ * Light values live on :root; dark values are applied by [data-theme="dark"] (set before
+ * first paint by the inline script in index.html) or, without JS, by the OS preference.
+ * Contrast for every pairing is checked by tests/contrast.test.js.
+ *
+ * Colour roles (where each colour may be used):
+ *   primary  (electric blue) – primary actions, links, selection, the "Convert" tool
+ *   secondary (violet)       – second gradient stop, focus ring, the "Edit" tool
+ *   accent   (coral)         – the "Compress" tool and decorative highlights
+ *   cyan                     – the "OCR" tool and decorative highlights
+ *   *-text variants          – the only versions allowed for text and meaningful icons;
+ *                              vivid accent/cyan fills are decoration only (below 4.5:1)
+ *   success/warning/danger/info – status, always paired with an icon and words
+ *   Gradients: hero background, primary buttons, the active navigation item.
+ */
+@layer base {
+  :root {
+    color-scheme: light;
+    --c-bg: 245 246 251;
+    --c-surface: 255 255 255;
+    --c-surface-2: 239 242 249;
+    --c-surface-3: 228 233 245;
+    --c-fg: 14 20 48;
+    --c-muted: 74 83 114;
+    --c-line: 225 229 240;
+    --c-line-strong: 122 132 163;
+    --c-on-primary: 255 255 255;
+
+    --c-primary: 35 83 240;
+    --c-primary-text: 35 83 240;
+    --c-secondary: 113 52 230;
+    --c-secondary-text: 113 52 230;
+    --c-accent: 242 101 79;
+    --c-accent-text: 185 58 38;
+    --c-cyan: 20 184 212;
+    --c-cyan-text: 11 110 134;
+
+    --c-success: 22 122 62;
+    --c-warning: 154 90 0;
+    --c-danger: 192 38 45;
+    --c-info: 11 110 134;
+    --c-focus: 113 52 230;
+
+    --gradient-brand: linear-gradient(135deg, rgb(35 83 240) 0%, rgb(113 52 230) 100%);
+    --gradient-text: linear-gradient(100deg, rgb(35 83 240), rgb(113 52 230) 60%, rgb(185 58 38));
+    --hero-blob-opacity: 0.22;
+    --shadow-sm: 0 1px 2px rgb(14 20 48 / 0.06), 0 1px 3px rgb(14 20 48 / 0.08);
+    --shadow-md: 0 4px 12px rgb(14 20 48 / 0.08), 0 2px 4px rgb(14 20 48 / 0.06);
+    --shadow-lg: 0 14px 34px rgb(35 83 240 / 0.16), 0 4px 10px rgb(14 20 48 / 0.08);
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --c-bg: 10 15 36;
+    --c-surface: 17 24 52;
+    --c-surface-2: 24 33 67;
+    --c-surface-3: 31 42 85;
+    --c-fg: 237 240 251;
+    --c-muted: 169 178 208;
+    --c-line: 37 48 88;
+    --c-line-strong: 105 115 156;
+    --c-on-primary: 255 255 255;
+
+    --c-primary: 35 83 240;
+    --c-primary-text: 142 168 255;
+    --c-secondary: 113 52 230;
+    --c-secondary-text: 195 177 255;
+    --c-accent: 242 101 79;
+    --c-accent-text: 255 154 136;
+    --c-cyan: 20 184 212;
+    --c-cyan-text: 95 220 239;
+
+    --c-success: 91 217 138;
+    --c-warning: 245 185 74;
+    --c-danger: 255 138 138;
+    --c-info: 95 220 239;
+    --c-focus: 195 177 255;
+
+    --gradient-text: linear-gradient(100deg, rgb(142 168 255), rgb(195 177 255) 60%, rgb(255 154 136));
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 6px 16px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 16px 40px rgb(35 83 240 / 0.25), 0 4px 12px rgb(0 0 0 / 0.4);
+  }
+
+  /* No-JS fallback: follow the OS unless the user explicitly chose light. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      color-scheme: dark;
+      --c-bg: 10 15 36;
+      --c-surface: 17 24 52;
+      --c-surface-2: 24 33 67;
+      --c-surface-3: 31 42 85;
+      --c-fg: 237 240 251;
+      --c-muted: 169 178 208;
+      --c-line: 37 48 88;
+      --c-line-strong: 105 115 156;
+      --c-primary-text: 142 168 255;
+      --c-secondary-text: 195 177 255;
+      --c-accent-text: 255 154 136;
+      --c-cyan-text: 95 220 239;
+      --c-success: 91 217 138;
+      --c-warning: 245 185 74;
+      --c-danger: 255 138 138;
+      --c-info: 95 220 239;
+      --c-focus: 195 177 255;
+      --gradient-text: linear-gradient(100deg, rgb(142 168 255), rgb(195 177 255) 60%, rgb(255 154 136));
+    }
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgb(var(--c-primary) / 0.25);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Cards that navigate somewhere lift slightly on hover/focus. */
+  .card-interactive {
+    @apply card transition duration-200 ease-out;
+  }
+  .card-interactive:hover,
+  .card-interactive:focus-visible {
+    @apply -translate-y-0.5 border-line-strong;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn text-on-primary;
+    background-image: var(--gradient-brand);
+    box-shadow: var(--shadow-md);
+  }
+  .btn-primary:not(:disabled):hover {
+    @apply -translate-y-px;
+    box-shadow: var(--shadow-lg);
+  }
+  .btn-secondary {
+    @apply btn border border-line-strong bg-surface text-fg hover:bg-surface-2;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:bg-surface-2 hover:text-fg;
+  }
+  .btn-icon {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-fg;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm text-fg placeholder:text-muted;
+  }
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-fg;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .text-gradient {
+    background-image: var(--gradient-text);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .step-badge {
+    @apply inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-on-primary;
+    background-image: var(--gradient-brand);
+  }
+
+  .tool-chip {
+    @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl;
+  }
+}
+
+/*
+ * Per-tool identity colours for icon chips. Kept outside @layer so they are always
+ * emitted: templates build these class names dynamically (`tool-${category}`).
+ */
+.tool-convert { @apply bg-primary/10 text-primary-text; }
+.tool-edit { @apply bg-secondary/10 text-secondary-text; }
+.tool-ocr { @apply bg-cyan-text/10 text-cyan-text; }
+.tool-compress { @apply bg-accent-text/10 text-accent-text; }
+
+/*
+ * Secondary controls on draggable cards: always visible on touch screens, revealed on
+ * hover or keyboard focus where a pointer can hover.
+ */
+@media (hover: hover) {
+  .hover-reveal {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .hover-reveal-group:hover .hover-reveal,
+  .hover-reveal-group:focus-within .hover-reveal {
+    opacity: 1;
+  }
+}
+
+@layer utilities {
+  .sr-only-focusable:not(:focus) {
+    @apply sr-only;
+  }
+}
+
+/* Indeterminate progress bar for long-running jobs. */
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* Motion is decorative only; honour the user's preference to reduce it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .card-interactive:hover,
+  .card-interactive:focus-visible,
+  .btn-primary:not(:disabled):hover {
+    transform: none;
+  }
+}

@@ -16,9 +16,10 @@ A self-hosted web application for PDF operations: convert, edit, OCR, and compre
 - **Page-level merge reorder** — drag and drop individual pages across multiple PDFs with color-coded source tracking
 - **Download-before-save** — preview results in a card, then download at your convenience
 - **Ghostscript compression** — four quality presets (screen 72dpi, ebook 150dpi, printer 300dpi, prepress 300dpi) with pikepdf fallback
-- **Rate limiting** — 1s minimum delay between requests per IP, max 5 requests per 10s
-- **Auto-cleanup** — temporary files are purged after 24 hours
+- **Rate limiting** — 1s minimum delay between requests per IP, max 5 requests per 10s (configurable)
+- **Auto-cleanup** — uploads and results are deleted as soon as the response is sent; a sweeper also purges anything older than 24 hours
 - **50MB max upload** per file
+- **Light and dark themes** — follows the OS by default, remembers an explicit choice; WCAG AA contrast checked by tests
 
 ## Tech Stack
 
@@ -51,14 +52,23 @@ pdf-tools/
 │   │   │   ├── base.py            # Abstract OCR interface
 │   │   │   ├── tesseract_backend.py
 │   │   │   └── factory.py         # Backend selector
+│   │   ├── errors.py              # User-facing errors + exception handlers
 │   │   └── utils/
-│   │       └── file_utils.py      # Temp file management + auto-cleanup
+│   │       ├── file_utils.py      # Temp job dirs, cleanup after response + TTL sweeper
+│   │       ├── validation.py      # Shared upload / parameter validation
+│   │       ├── pdf_render.py      # Page-by-page rasterising
+│   │       ├── processing.py      # Runs PDF work in a bounded worker pool
+│   │       └── responses.py       # File responses that delete their job dir
+│   ├── tests/                     # unittest suite (python -m unittest discover -s tests -t .)
 │   ├── requirements.txt
+│   ├── requirements-dev.txt       # + test-only dependencies
 │   └── Dockerfile
+├── docs/                          # PROJECT_AUDIT.md, IMPROVEMENTS.md
 ├── frontend/
 │   ├── src/
 │   │   ├── views/                 # Page components (lazy-loaded)
 │   │   │   ├── HomeView.vue       # Tool grid
+│   │   │   ├── ConvertHubView.vue # Convert tools hub
 │   │   │   ├── CompressView.vue   # Ghostscript compression
 │   │   │   ├── OcrView.vue        # OCR extraction
 │   │   │   ├── EditView.vue       # Edit tools hub
@@ -74,11 +84,15 @@ pdf-tools/
 │   │   │   ├── ResultCard.vue     # Download-before-save result card
 │   │   │   ├── ImageModal.vue     # Full-size image preview
 │   │   │   └── ...
-│   │   ├── api/index.js           # Axios HTTP client
+│   │   ├── api/                   # Axios client + thumbnails helper
+│   │   ├── utils/                 # Pure helpers (errors, files, merge, theme, …)
+│   │   ├── tools.js               # Tool registry: names, routes, colours, icons
+│   │   ├── style.css              # Design tokens (light/dark) + component classes
 │   │   └── main.js                # Router + lazy imports
+│   ├── tests/                     # node:test unit + contrast tests (npm test)
 │   ├── package.json
 │   └── Dockerfile
-├── config.env                     # Environment variables
+├── config.env.example             # Copy to config.env
 ├── docker-compose.yml
 └── README.md
 ```
@@ -98,6 +112,7 @@ pdf-tools/
 ```bash
 git clone <repo-url>
 cd pdf-tools
+cp config.env.example config.env   # docker-compose reads config.env
 docker-compose up --build
 ```
 
@@ -130,7 +145,22 @@ npm install
 npm run dev
 ```
 
-Frontend runs at http://localhost:5173 (proxies API to backend)
+Frontend runs at http://localhost:3000 (proxies `/api` to the backend on port 8000)
+
+### Running tests
+
+```bash
+# Backend (unittest; httpx is needed for FastAPI's TestClient)
+cd backend
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -t .
+
+# Frontend (Node's built-in test runner, no extra dependencies)
+cd frontend
+npm test
+```
+
+Tests that need Poppler, Ghostscript or Tesseract are skipped when those tools are not installed.
 
 ## API Reference
 
@@ -146,7 +176,7 @@ Frontend runs at http://localhost:5173 (proxies API to backend)
 **Parameters (form-data):**
 - `file` — source file
 - `format` — image format: `png`, `jpg`, `tiff` (for pdf-to-image)
-- `dpi` — resolution: `150`, `200`, `300` (for pdf-to-image)
+- `dpi` — resolution: `150`, `200`, `300` in the UI; the API accepts 36–600 (pdf-to-image and thumbnails)
 
 ### Edit
 
@@ -168,11 +198,12 @@ Frontend runs at http://localhost:5173 (proxies API to backend)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/ocr/extract-text` | Extract text from scanned PDF |
+| `POST` | `/api/ocr/make-selectable` | Return the PDF with an invisible, selectable text layer |
 | `GET` | `/api/ocr/backends` | List available OCR backends |
 
 **Parameters:**
 - `file` — PDF file
-- `language` — Tesseract language code: `eng`, `ind`, `jpn`, `kor`, `chi_sim`, `deu`, `fra`, `spa`
+- `language` — Tesseract language code: `eng`, `ind`, `jpn`, `kor`, `chi_sim`, `chi_tra`, `ara`, `deu`, `fra`, `spa`, `por`, `rus` (or a `+`-joined combination); the language data must be installed on the server
 - `backend` — OCR engine name (optional, uses config default)
 
 ### Compress
@@ -183,14 +214,20 @@ Frontend runs at http://localhost:5173 (proxies API to backend)
 
 **Parameters:**
 - `file` — PDF file
-- `quality` — `low` (screen/72dpi) | `medium` (ebook/150dpi) | `high` (printer/300dpi) | `very_high` (prepress/300dpi)
-- `engine` — `gs` (Ghostscript, default) | `pikepdf` (fallback)
+- `quality` — `extreme` (screen/72dpi) | `low` (ebook/150dpi) | `medium` (printer/300dpi, default) | `high` (prepress/300dpi)
+
+Ghostscript is used when installed; otherwise pikepdf is used as a fallback.
 
 **Response headers:**
 - `X-Original-Size` — original file size in bytes
 - `X-Compressed-Size` — compressed file size in bytes
 - `X-Reduction-Percent` — size reduction percentage
-- `X-Engine` — engine used (`gs` or `pikepdf`)
+- `X-Images-Compressed`, `X-Total-Images` — image statistics (Ghostscript path)
+- `X-Engine` — engine that produced the file (`ghostscript` or `pikepdf`)
+
+### Errors
+
+Invalid input returns `400` (or `413` for oversized uploads, `422` for content the converter cannot handle) with a JSON body `{"detail": "<message safe to show users>"}`. Unexpected failures return `500` with a generic message; details are only logged on the server.
 
 ### Health Check
 
@@ -257,10 +294,12 @@ OCR_BACKEND=my_ocr
 ## Security
 
 - All processing runs locally — no external API calls
-- Temporary files are auto-cleaned after 24 hours
-- File uploads are limited to 50MB
-- Input validation on all endpoints
-- Built-in rate limiting (1s delay, 5 req/10s per IP)
+- Uploads and results are deleted right after each response (24-hour sweeper as a safety net)
+- File uploads are limited to 50MB; DPI and OCR language are validated
+- Uploads are checked by content (PDFs are parsed, images decoded) before processing; error messages never include server paths or tool output
+- Built-in rate limiting (1s delay, 5 req/10s per IP). Note: the limiter trusts `X-Forwarded-For`, so it is only effective behind a proxy that sets it (see `docs/PROJECT_AUDIT.md`, SEC-03)
+
+See `docs/PROJECT_AUDIT.md` for the full audit and `docs/IMPROVEMENTS.md` for what has changed.
 
 ## Built With AI
 

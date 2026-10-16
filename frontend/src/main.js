@@ -11,6 +11,10 @@ const router = createRouter({
       component: () => import("./views/HomeView.vue"),
     },
     {
+      path: "/convert",
+      component: () => import("./views/ConvertHubView.vue"),
+    },
+    {
       path: "/convert/pdf-to-image",
       component: () => import("./views/PdfToImageViews.vue"),
     },
@@ -45,6 +49,10 @@ const router = createRouter({
     {
       path: "/compress",
       component: () => import("./views/CompressView.vue"),
+    },
+    {
+      path: "/:pathMatch(.*)*",
+      redirect: "/",
     },
   ],
 });

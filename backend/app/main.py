@@ -4,18 +4,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CLEANUP_INTERVAL
+from .errors import register_exception_handlers
 from .utils.file_utils import cleanup_old_files
 from .middleware import RateLimitMiddleware
 from .api import convert, edit, ocr, compress
 
 app = FastAPI(title="PDF Tools API", version="1.0.0")
+register_exception_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # no cookies or auth; the bundled UI is same-origin
     allow_methods=["*"],
     allow_headers=["*"],
 )

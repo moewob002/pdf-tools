@@ -1,17 +1,17 @@
 <template>
-  <div class="flex flex-col items-center justify-center py-12">
-    <div class="relative">
-      <div class="w-16 h-16 rounded-full border-4 border-indigo-200"></div>
-      <div class="absolute top-0 left-0 w-16 h-16 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin"></div>
+  <div role="status" aria-live="polite" class="flex flex-col items-center justify-center py-10 text-center">
+    <div class="relative h-14 w-14" aria-hidden="true">
+      <div class="absolute inset-0 rounded-full border-4 border-primary/15"></div>
+      <div class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-r-secondary border-t-primary"></div>
     </div>
-    <p class="mt-6 text-gray-700 font-medium">{{ message }}</p>
-    <p v-if="submessage" class="mt-1 text-sm text-gray-500">{{ submessage }}</p>
+    <p class="mt-5 font-semibold text-fg">{{ message }}</p>
+    <p v-if="submessage" class="mt-1 text-sm text-muted">{{ submessage }}</p>
   </div>
 </template>
 
 <script setup>
 defineProps({
-  message: { type: String, default: "Processing..." },
+  message: { type: String, default: "Processing…" },
   submessage: { type: String, default: "" },
 });
 </script>

@@ -3,7 +3,20 @@ from pathlib import Path
 import pytesseract
 from PIL import Image
 
+from ..errors import UserInputError
 from .base import OCRBackend
+
+LANGUAGE_UNAVAILABLE_MESSAGE = (
+    "OCR could not run with the selected language. "
+    "The language data may not be installed on the server."
+)
+
+
+def _run(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except pytesseract.TesseractError:
+        raise UserInputError(LANGUAGE_UNAVAILABLE_MESSAGE, status_code=422) from None
 
 
 class TesseractOCR(OCRBackend):
@@ -15,12 +28,14 @@ class TesseractOCR(OCRBackend):
 
     def extract_text(self, image_path: Path, language: str = "eng") -> str:
         img = Image.open(image_path)
-        text = pytesseract.image_to_string(img, lang=language)
+        text = _run(pytesseract.image_to_string, img, lang=language)
         return text.strip()
 
     def extract_data(self, image_path: Path, language: str = "eng") -> list[dict]:
         img = Image.open(image_path)
-        data = pytesseract.image_to_data(img, lang=language, output_type=pytesseract.Output.DICT)
+        data = _run(
+            pytesseract.image_to_data, img, lang=language, output_type=pytesseract.Output.DICT
+        )
 
         words = []
         n = len(data["text"])

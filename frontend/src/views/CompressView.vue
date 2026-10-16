@@ -1,123 +1,127 @@
 <template>
-  <div class="max-w-4xl mx-auto">
-    <h2 class="text-2xl font-bold text-gray-900 mb-2">Compress PDF</h2>
-    <p class="text-sm text-gray-500 mb-6">Reduce your PDF file size with image recompression and metadata cleanup.</p>
+  <div class="mx-auto max-w-4xl">
+    <PageHeader
+      :title="tool.title"
+      :description="tool.desc"
+      :category="tool.category"
+      :icon="tool.icon"
+      :back="{ path: '/', label: 'all tools' }"
+    />
 
-    <div class="space-y-8">
-      <div v-if="!resultBlob" class="bg-white rounded-xl shadow-sm border p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
-            <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="font-semibold text-gray-800">Upload & Compress</h3>
-            <p class="text-xs text-gray-500">Select a PDF and choose compression level</p>
-          </div>
-        </div>
-
+    <div v-if="!resultBlob" class="space-y-5">
+      <ToolStep :number="1" title="Upload a PDF">
         <FileUpload
           ref="compressUpload"
           accept=".pdf"
           accept-text="PDF files"
           @update:files="(f) => (compressFiles = f)"
         />
+      </ToolStep>
 
-        <div v-if="compressFiles.length > 0" class="mt-4 flex items-center gap-2 text-sm text-gray-600">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {{ compressFiles[0].name }} ({{ formatSize(compressFiles[0].size) }})
-        </div>
-
-        <div class="mt-6">
-          <label class="block text-sm font-medium text-gray-700 mb-3">Compression Level</label>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <label
-              v-for="q in qualityOptions"
-              :key="q.value"
-              class="relative cursor-pointer"
-            >
-              <input
-                v-model="quality"
-                type="radio"
-                :value="q.value"
-                class="peer sr-only"
-              />
-              <div class="border-2 rounded-lg p-3 text-center transition-all peer-checked:border-indigo-500 peer-checked:bg-indigo-50 hover:border-gray-300">
-                <div class="text-sm font-medium text-gray-800">{{ q.label }}</div>
-                <div class="text-xs text-gray-500 mt-1">{{ q.desc }}</div>
-                <div v-if="q.warn" class="text-xs text-amber-600 mt-1 font-medium">{{ q.warn }}</div>
-              </div>
+      <ToolStep :number="2" title="Choose a compression level">
+        <fieldset>
+          <legend class="sr-only">Compression level</legend>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label v-for="q in qualityOptions" :key="q.value" class="relative block cursor-pointer">
+              <input v-model="quality" type="radio" name="quality" :value="q.value" class="peer sr-only" />
+              <span class="flex h-full flex-col rounded-xl border-2 border-line bg-surface p-4 transition peer-checked:border-primary-text peer-checked:bg-primary/10 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus hover:border-line-strong">
+                <span class="flex items-center justify-between gap-2">
+                  <span class="font-semibold text-fg">{{ q.label }}</span>
+                  <span
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-full border-2"
+                    :class="quality === q.value ? 'border-transparent text-on-primary' : 'border-line-strong'"
+                    :style="quality === q.value ? { backgroundImage: 'var(--gradient-brand)' } : null"
+                    aria-hidden="true"
+                  >
+                    <svg v-if="quality === q.value" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                </span>
+                <span class="mt-1 text-sm text-muted">{{ q.desc }}</span>
+                <span v-if="q.warn" class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-warning">
+                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                  </svg>
+                  {{ q.warn }}
+                </span>
+              </span>
             </label>
           </div>
-        </div>
+        </fieldset>
+      </ToolStep>
 
-        <div class="mt-6">
+      <ToolStep :number="3" title="Compress and download">
+        <div class="flex flex-wrap items-center gap-3">
           <DownloadButton
             :loading="loading"
+            loading-text="Compressing…"
             :disabled="compressFiles.length === 0"
             @click="compressPdf"
           >
-            {{ loading ? "Compressing..." : "Compress PDF" }}
+            Compress PDF
           </DownloadButton>
+          <p v-if="compressFiles.length === 0" class="text-sm text-muted">Upload a PDF to continue.</p>
         </div>
-
-        <div v-if="loading" class="mt-4">
-          <div class="w-full bg-gray-200 rounded-full h-2">
-            <div class="bg-indigo-600 h-2 rounded-full animate-pulse" style="width: 100%"></div>
+        <div v-if="loading" class="mt-4" role="status">
+          <div class="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+            <div class="h-2 w-1/3 animate-[progress_1.2s_ease-in-out_infinite] rounded-full" style="background-image: var(--gradient-brand)"></div>
           </div>
-          <p class="text-xs text-gray-500 mt-2">Processing PDF — Ghostscript recompressing and downsampling...</p>
+          <p class="mt-2 text-sm text-muted">Recompressing images and removing unused data…</p>
         </div>
-      </div>
-
-      <ResultCard
-        v-if="resultBlob && stats"
-        title="Compression Complete"
-        :subtitle="`Using ${stats.engine === 'ghostscript' ? 'Ghostscript' : 'PikePDF'} engine`"
-        :filename="`compressed_${compressFiles[0]?.name || 'output.pdf'}`"
-        :file-size="resultBlob.size"
-        :blob="resultBlob"
-        :show-reset="true"
-        @reset="reset"
-      >
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div class="text-center p-4 bg-gray-50 rounded-lg">
-            <div class="text-xs text-gray-500 mb-1">Original</div>
-            <div class="text-lg font-semibold text-gray-800">{{ formatSize(stats.original_size) }}</div>
-          </div>
-          <div class="text-center p-4 bg-gray-50 rounded-lg">
-            <div class="text-xs text-gray-500 mb-1">Compressed</div>
-            <div class="text-lg font-semibold text-gray-800">{{ formatSize(stats.compressed_size) }}</div>
-          </div>
-          <div class="text-center p-4 rounded-lg" :class="stats.reduction_percent > 0 ? 'bg-green-50' : 'bg-gray-50'">
-            <div class="text-xs text-gray-500 mb-1">Reduced</div>
-            <div class="text-lg font-semibold" :class="stats.reduction_percent > 0 ? 'text-green-700' : 'text-gray-600'">
-              {{ stats.reduction_percent > 0 ? stats.reduction_percent + '%' : 'No change' }}
-            </div>
-          </div>
-          <div v-if="stats.images_compressed > 0" class="text-center p-4 bg-blue-50 rounded-lg">
-            <div class="text-xs text-gray-500 mb-1">Images Processed</div>
-            <div class="text-lg font-semibold text-blue-700">{{ stats.images_compressed }}/{{ stats.total_images }}</div>
-          </div>
-        </div>
-      </ResultCard>
-
-      <div v-if="error" class="bg-red-50 text-red-700 rounded-lg p-4 text-sm">
-        {{ error }}
-      </div>
+      </ToolStep>
     </div>
+
+    <ResultCard
+      v-if="resultBlob && stats"
+      title="Compression complete"
+      :subtitle="`Engine: ${stats.engine === 'ghostscript' ? 'Ghostscript' : 'pikepdf'}`"
+      :filename="`compressed_${compressFiles[0]?.name || 'output.pdf'}`"
+      :file-size="resultBlob.size"
+      :blob="resultBlob"
+      :show-reset="true"
+      @reset="reset"
+    >
+      <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-xl bg-surface-2/70 p-4 text-center">
+          <dt class="text-xs text-muted">Original</dt>
+          <dd class="mt-1 text-lg font-bold text-fg">{{ formatSize(stats.original_size) }}</dd>
+        </div>
+        <div class="rounded-xl bg-surface-2/70 p-4 text-center">
+          <dt class="text-xs text-muted">Compressed</dt>
+          <dd class="mt-1 text-lg font-bold text-fg">{{ formatSize(stats.compressed_size) }}</dd>
+        </div>
+        <div class="rounded-xl p-4 text-center" :class="stats.reduction_percent > 0 ? 'bg-success/10' : 'bg-warning/10'">
+          <dt class="text-xs text-muted">Change</dt>
+          <dd class="mt-1 text-lg font-bold" :class="stats.reduction_percent > 0 ? 'text-success' : 'text-warning'">
+            {{ stats.reduction_percent > 0 ? `−${stats.reduction_percent}%` : stats.reduction_percent < 0 ? `+${-stats.reduction_percent}% larger` : "No change" }}
+          </dd>
+        </div>
+        <div v-if="stats.images_compressed > 0" class="rounded-xl bg-info/10 p-4 text-center">
+          <dt class="text-xs text-muted">Images processed</dt>
+          <dd class="mt-1 text-lg font-bold text-info">{{ stats.images_compressed }}/{{ stats.total_images }}</dd>
+        </div>
+      </dl>
+    </ResultCard>
+
+    <AlertMessage v-if="error" class="mt-5">{{ error }}</AlertMessage>
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
+import { formatSize } from "../utils/format";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
+import AlertMessage from "../components/AlertMessage.vue";
+import PageHeader from "../components/PageHeader.vue";
+import ToolStep from "../components/ToolStep.vue";
+import { toolById } from "../tools";
 
+const tool = toolById("compress");
 const compressFiles = ref([]);
 const quality = ref("medium");
 const loading = ref(false);
@@ -132,12 +136,6 @@ const qualityOptions = [
   { value: "medium", label: "Balanced", desc: "300 dpi, print quality" },
   { value: "high", label: "High Quality", desc: "300 dpi, no subsampling" },
 ];
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
 
 async function compressPdf() {
   loading.value = true;
@@ -158,7 +156,7 @@ async function compressPdf() {
       engine: res.headers["x-engine"] || "unknown",
     };
   } catch (e) {
-    error.value = e.response?.data?.detail || "Compression failed";
+    error.value = await getErrorMessage(e, "Compression failed");
   } finally {
     loading.value = false;
   }

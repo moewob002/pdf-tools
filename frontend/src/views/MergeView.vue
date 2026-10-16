@@ -1,193 +1,190 @@
 <template>
-  <div class="max-w-4xl mx-auto">
-    <div class="flex items-center gap-3 mb-6">
-      <router-link
-        to="/edit"
-        class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-      </router-link>
-      <div>
-        <h2 class="text-2xl font-bold text-gray-900">Merge PDFs</h2>
-        <p class="text-sm text-gray-500">Combine pages from multiple PDFs, drag to reorder</p>
-      </div>
-    </div>
+  <div class="mx-auto max-w-4xl">
+    <PageHeader
+      :title="tool.title"
+      :description="tool.desc"
+      :category="tool.category"
+      :icon="tool.icon"
+      :back="{ path: '/edit', label: 'Edit tools' }"
+    />
 
-    <div class="space-y-6">
-      <div v-if="!resultBlob" class="bg-white rounded-xl shadow-sm border p-6">
+    <div v-if="!resultBlob" class="space-y-5">
+      <ToolStep :number="1" title="Upload PDFs" hint="Add two or more files. You can add more later.">
         <FileUpload
           ref="mergeUpload"
           accept=".pdf"
           accept-text="PDF files"
           :multiple="true"
+          :file-status="fileStatus"
           @update:files="onFilesChange"
         />
 
-        <div v-if="previewLoading" class="mt-4">
-          <ProcessingSpinner message="Loading page previews..." submessage="Extracting thumbnails from each PDF" />
+        <AlertMessage v-if="failedSources.length" tone="warning" title="Some files were not added" class="mt-4">
+          <ul class="space-y-1">
+            <li v-for="source in failedSources" :key="source.id">
+              <strong>{{ source.name }}</strong>: {{ source.error }}
+            </li>
+          </ul>
+        </AlertMessage>
+      </ToolStep>
+
+      <ToolStep :number="2" title="Arrange pages" hint="The merged PDF follows this order.">
+        <MergeReorder
+          v-if="mergePages.length > 0"
+          v-model="mergePages"
+          :loading="false"
+          @addMore="triggerAddMore"
+        />
+        <ProcessingSpinner v-else-if="previewLoading" message="Loading page previews…" submessage="Reading each PDF" />
+        <p v-else class="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-sm text-muted">
+          Pages from your PDFs appear here.
+        </p>
+        <p v-if="previewLoading && mergePages.length > 0" class="mt-3 text-sm text-muted" role="status">
+          Still reading some files…
+        </p>
+      </ToolStep>
+
+      <ToolStep :number="3" title="Merge and download">
+        <div class="flex flex-wrap items-center gap-3">
+          <DownloadButton
+            :loading="loading"
+            loading-text="Merging…"
+            :disabled="mergePages.length < 2 || previewLoading"
+            @click="mergePdfs"
+          >
+            Merge {{ mergePages.length }} Pages
+          </DownloadButton>
+          <p class="text-sm text-muted">
+            <template v-if="previewLoading">Wait until every file has been read.</template>
+            <template v-else-if="mergePages.length < 2">Add at least two pages.</template>
+            <template v-else>From {{ fileCount }} file{{ fileCount !== 1 ? 's' : '' }}.</template>
+          </p>
         </div>
-
-        <div v-if="mergePages.length > 0 && !previewLoading" class="mt-4">
-          <MergeReorder
-            v-model="mergePages"
-            :loading="false"
-            @addMore="triggerAddMore"
-          />
-          <div class="mt-4 flex items-center gap-4">
-            <DownloadButton
-              :loading="loading"
-              :disabled="mergePages.length < 2"
-              @click="mergePdfs"
-            >
-              Merge {{ mergePages.length }} Pages
-            </DownloadButton>
-            <span class="text-xs text-gray-500">from {{ fileCount }} file{{ fileCount !== 1 ? 's' : '' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <ResultCard
-        v-if="resultBlob"
-        title="Merge Complete"
-        :subtitle="`${resultPageCount} pages merged from ${fileCount} file${fileCount !== 1 ? 's' : ''}`"
-        filename="merged.pdf"
-        :file-size="resultBlob.size"
-        :blob="resultBlob"
-        :show-reset="true"
-        @reset="reset"
-      />
-
-      <div v-if="error" class="bg-red-50 text-red-700 rounded-lg p-4 text-sm">{{ error }}</div>
+      </ToolStep>
     </div>
+
+    <ResultCard
+      v-if="resultBlob"
+      title="Merge complete"
+      :subtitle="`${resultPageCount} pages merged from ${resultFileCount} file${resultFileCount !== 1 ? 's' : ''}`"
+      filename="merged.pdf"
+      :file-size="resultBlob.size"
+      :blob="resultBlob"
+      :show-reset="true"
+      @reset="reset"
+    />
+
+    <AlertMessage v-if="error" class="mt-5">{{ error }}</AlertMessage>
   </div>
 </template>
 
 <script setup>
-import { ref, defineAsyncComponent } from "vue";
+import { ref, computed, defineAsyncComponent } from "vue";
 import api from "../api";
+import { loadThumbnails } from "../api/thumbnails";
+import { getErrorMessage } from "../utils/errors";
+import { buildMergeRequest, diffSources, withoutSources } from "../utils/merge";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ProcessingSpinner from "../components/ProcessingSpinner.vue";
 import ResultCard from "../components/ResultCard.vue";
+import AlertMessage from "../components/AlertMessage.vue";
+import PageHeader from "../components/PageHeader.vue";
+import ToolStep from "../components/ToolStep.vue";
+import { toolById } from "../tools";
 
 const MergeReorder = defineAsyncComponent(() =>
   import("../components/MergeReorder.vue")
 );
 
+const tool = toolById("merge");
+
+// One entry per uploaded file: { id, file, name, status: "loading" | "ready" | "error", error }
+const sources = ref([]);
 const mergePages = ref([]);
-const previewLoading = ref(false);
 const loading = ref(false);
 const error = ref("");
 const mergeUpload = ref(null);
 const resultBlob = ref(null);
-const fileCount = ref(0);
 const resultPageCount = ref(0);
+const resultFileCount = ref(0);
 
-let nextFileIdx = 0;
-let fileMap = {};
+let nextSourceId = 0;
 
-async function loadThumbnails(file) {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("dpi", "100");
-  const res = await api.post("/edit/thumbnails", form);
-  return res.data.pages;
-}
+const previewLoading = computed(() => sources.value.some((s) => s.status === "loading"));
+const failedSources = computed(() => sources.value.filter((s) => s.status === "error"));
+const fileCount = computed(
+  () => new Set(mergePages.value.map((p) => p.file_index)).size
+);
 
 async function onFilesChange(files) {
-  previewLoading.value = true;
   error.value = "";
+  const { added, removedIds } = diffSources(sources.value, files);
 
-  if (files.length === 0) {
-    mergePages.value = [];
-    fileCount.value = 0;
-    nextFileIdx = 0;
-    fileMap = {};
-    previewLoading.value = false;
-    return;
+  if (removedIds.length) {
+    sources.value = sources.value.filter((s) => !removedIds.includes(s.id));
+    mergePages.value = withoutSources(mergePages.value, removedIds);
   }
 
-  const existingNames = new Set(mergePages.value.map((p) => p.source_name));
-  const newPages = [...mergePages.value];
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    if (existingNames.has(file.name)) continue;
-
-    const fileIdx = nextFileIdx++;
-    fileMap[fileIdx] = file;
-    existingNames.add(file.name);
-
+  // Load previews one file at a time; the backend rate-limits bursts.
+  for (const file of added) {
+    const source = { id: nextSourceId++, file, name: file.name, status: "loading", error: "" };
+    sources.value = [...sources.value, source];
     try {
       const pages = await loadThumbnails(file);
-      for (const page of pages) {
-        newPages.push({
-          id: `${file.name}-${page.page}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          file_index: fileIdx,
+      if (!sources.value.some((s) => s.id === source.id)) continue; // removed meanwhile
+      mergePages.value = [
+        ...mergePages.value,
+        ...pages.map((page) => ({
+          id: `${source.id}-${page.page}`,
+          file_index: source.id,
           page_num: page.page,
           source_name: file.name,
           thumbnail: page.image,
-        });
-      }
-    } catch (_) {
-      newPages.push({
-        id: `${file.name}-p1-${Date.now()}`,
-        file_index: fileIdx,
-        page_num: 1,
-        source_name: file.name,
-        thumbnail: null,
+        })),
+      ];
+      updateSource(source.id, { status: "ready" });
+    } catch (e) {
+      // Never guess the page count: a file whose preview failed is not added at all.
+      updateSource(source.id, {
+        status: "error",
+        error: await getErrorMessage(e, "Could not read this PDF"),
       });
     }
   }
+}
 
-  mergePages.value = newPages;
-  fileCount.value = Object.keys(fileMap).length;
-  previewLoading.value = false;
+function fileStatus(file) {
+  const source = sources.value.find((s) => s.file === file);
+  if (!source || source.status === "loading") return { state: "loading", label: "Reading…" };
+  if (source.status === "error") return { state: "error", label: "Not added" };
+  const pages = mergePages.value.filter((p) => p.file_index === source.id).length;
+  return { state: "ready", label: `${pages} page${pages !== 1 ? "s" : ""}` };
+}
+
+function updateSource(id, patch) {
+  sources.value = sources.value.map((s) => (s.id === id ? { ...s, ...patch } : s));
 }
 
 function triggerAddMore() {
-  if (mergeUpload.value?.$el) {
-    const input = mergeUpload.value.$el.querySelector('input[type="file"]');
-    if (input) input.click();
-  }
+  mergeUpload.value?.openPicker();
 }
 
 async function mergePdfs() {
   loading.value = true;
   error.value = "";
   try {
-    const pageOrder = mergePages.value.map((p) => ({
-      file_index: p.file_index,
-      page: p.page_num,
-    }));
-
+    const { files, pageOrder } = buildMergeRequest(mergePages.value, sources.value);
     const form = new FormData();
-    const sortedFileIndices = [...new Set(mergePages.value.map((p) => p.file_index))].sort((a, b) => a - b);
-    for (const idx of sortedFileIndices) {
-      if (fileMap[idx]) {
-        form.append("files", fileMap[idx]);
-      }
-    }
-
-    const originalToNewMap = {};
-    sortedFileIndices.forEach((origIdx, newIdx) => {
-      originalToNewMap[origIdx] = newIdx;
-    });
-
-    const remappedOrder = pageOrder.map((item) => ({
-      file_index: originalToNewMap[item.file_index],
-      page: item.page,
-    }));
-
-    form.append("page_order", JSON.stringify(remappedOrder));
+    files.forEach((f) => form.append("files", f));
+    form.append("page_order", JSON.stringify(pageOrder));
 
     const res = await api.post("/edit/merge-custom", form, { responseType: "blob" });
     resultBlob.value = res.data;
-    resultPageCount.value = mergePages.value.length;
+    resultPageCount.value = pageOrder.length;
+    resultFileCount.value = files.length;
   } catch (e) {
-    error.value = e.response?.data?.detail || "Merge failed";
+    error.value = await getErrorMessage(e, "Merge failed");
   } finally {
     loading.value = false;
   }
@@ -195,11 +192,10 @@ async function mergePdfs() {
 
 function reset() {
   resultBlob.value = null;
+  sources.value = [];
   mergePages.value = [];
-  fileCount.value = 0;
   resultPageCount.value = 0;
-  nextFileIdx = 0;
-  fileMap = {};
+  resultFileCount.value = 0;
   error.value = "";
   if (mergeUpload.value) mergeUpload.value.clear();
 }

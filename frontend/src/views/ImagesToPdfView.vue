@@ -1,66 +1,70 @@
 <template>
-  <div class="max-w-4xl mx-auto">
-    <div class="flex items-center gap-3 mb-6">
-      <router-link
-        to="/"
-        class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-      >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-      </router-link>
-      <div>
-        <h2 class="text-2xl font-bold text-gray-900">Images to PDF</h2>
-        <p class="text-sm text-gray-500">Combine multiple images into a single PDF</p>
-      </div>
-    </div>
+  <div class="mx-auto max-w-4xl">
+    <PageHeader
+      :title="tool.title"
+      :description="tool.desc"
+      :category="tool.category"
+      :icon="tool.icon"
+      :back="{ path: '/convert', label: 'Convert tools' }"
+    />
 
-    <div class="space-y-6">
-      <div v-if="!resultBlob" class="bg-white rounded-xl shadow-sm border p-6">
+    <div v-if="!resultBlob" class="space-y-5">
+      <ToolStep :number="1" title="Upload images" hint="Pages follow the order of this list.">
         <FileUpload
           ref="fileUpload"
-          accept="image/*"
-          accept-text="PNG, JPG, TIFF, BMP images"
+          accept="image/png,image/jpeg,image/tiff,image/bmp"
+          accept-text="PNG, JPG, TIFF or BMP images"
           :multiple="true"
           @update:files="(f) => (files = f)"
         />
-        <div v-if="files.length > 0" class="mt-4">
-          <p class="text-xs text-gray-500">{{ files.length }} image{{ files.length !== 1 ? 's' : '' }} will be combined</p>
-        </div>
-        <div class="mt-4">
+      </ToolStep>
+
+      <ToolStep :number="2" title="Create the PDF">
+        <div class="flex flex-wrap items-center gap-3">
           <DownloadButton
             :loading="loading"
+            loading-text="Creating PDF…"
             :disabled="files.length === 0"
             @click="convert"
           >
             Convert to PDF
           </DownloadButton>
+          <p class="text-sm text-muted">
+            <template v-if="files.length === 0">Upload at least one image.</template>
+            <template v-else>{{ files.length }} image{{ files.length !== 1 ? "s" : "" }} will be combined.</template>
+          </p>
         </div>
-      </div>
-
-      <ResultCard
-        v-if="resultBlob"
-        title="Images Converted to PDF"
-        :subtitle="`${imageCount} images combined into one PDF`"
-        filename="converted.pdf"
-        :file-size="resultBlob.size"
-        :blob="resultBlob"
-        :show-reset="true"
-        @reset="reset"
-      />
-
-      <div v-if="error" class="bg-red-50 text-red-700 rounded-lg p-4 text-sm">{{ error }}</div>
+      </ToolStep>
     </div>
+
+    <ResultCard
+      v-if="resultBlob"
+      title="PDF ready"
+      :subtitle="`${imageCount} image(s) combined into one PDF`"
+      filename="converted.pdf"
+      :file-size="resultBlob.size"
+      :blob="resultBlob"
+      :show-reset="true"
+      @reset="reset"
+    />
+
+    <AlertMessage v-if="error" class="mt-5">{{ error }}</AlertMessage>
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
+import AlertMessage from "../components/AlertMessage.vue";
+import PageHeader from "../components/PageHeader.vue";
+import ToolStep from "../components/ToolStep.vue";
+import { toolById } from "../tools";
 
+const tool = toolById("image-to-pdf");
 const files = ref([]);
 const loading = ref(false);
 const error = ref("");
@@ -78,7 +82,7 @@ async function convert() {
     resultBlob.value = res.data;
     imageCount.value = files.value.length;
   } catch (e) {
-    error.value = e.response?.data?.detail || "Conversion failed";
+    error.value = await getErrorMessage(e, "Conversion failed");
   } finally {
     loading.value = false;
   }
