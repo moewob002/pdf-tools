@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pikepdf
 
-from ..utils.file_utils import create_temp_dir, save_upload
+from ..utils.file_utils import save_upload, temp_job
 
 QUALITY_PRESETS = {
     "extreme": {"gs_setting": "/screen", "desc": "72 dpi, aggressive downsampling"},
@@ -216,37 +216,39 @@ async def compress_pdf(
     filename: str,
     quality: str = "medium",
 ) -> tuple[Path, dict]:
-    job_dir = create_temp_dir("compress")
-    pdf_path = save_upload(file_bytes, filename, job_dir)
+    with temp_job("compress") as job_dir:
+        pdf_path = save_upload(file_bytes, filename, job_dir)
 
-    preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["medium"])
-    output_path = job_dir / f"compressed_{Path(filename).name}"
+        preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["medium"])
+        # Fixed internal name: Ghostscript treats "%" in -sOutputFile as a template,
+        # so the user's file name must never be part of it.
+        output_path = job_dir / "compressed.pdf"
 
-    # Try Ghostscript first (much more effective)
-    gs_success = _compress_with_ghostscript(pdf_path, output_path, preset["gs_setting"])
+        # Try Ghostscript first (much more effective)
+        if _compress_with_ghostscript(pdf_path, output_path, preset["gs_setting"]):
+            engine = "ghostscript"
+            images_compressed = _post_process_with_pikepdf(output_path)
+            total_images = images_compressed  # approximate
+        else:
+            # Fallback to pikepdf-only (less effective)
+            engine = "pikepdf"
+            _compress_with_pikepdf(pdf_path, output_path, quality)
+            images_compressed = 0
+            total_images = 0
 
-    if gs_success:
-        images_compressed = _post_process_with_pikepdf(output_path)
-        total_images = images_compressed  # approximate
-    else:
-        # Fallback to pikepdf-only (less effective)
-        gs_success = _compress_with_pikepdf(pdf_path, output_path, quality)
-        images_compressed = 0
-        total_images = 0
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            # Last resort: just copy original
+            output_path = pdf_path
 
-    if not output_path.exists() or output_path.stat().st_size == 0:
-        # Last resort: just copy original
-        output_path = pdf_path
+        original_size = len(file_bytes)
+        compressed_size = output_path.stat().st_size
+        ratio = round((1 - compressed_size / original_size) * 100, 1) if original_size > 0 else 0
 
-    original_size = len(file_bytes)
-    compressed_size = output_path.stat().st_size
-    ratio = round((1 - compressed_size / original_size) * 100, 1) if original_size > 0 else 0
-
-    return output_path, {
-        "original_size": original_size,
-        "compressed_size": compressed_size,
-        "reduction_percent": ratio,
-        "images_compressed": images_compressed,
-        "total_images": total_images,
-        "engine": "ghostscript" if gs_success else "pikepdf",
-    }
+        return output_path, {
+            "original_size": original_size,
+            "compressed_size": compressed_size,
+            "reduction_percent": ratio,
+            "images_compressed": images_compressed,
+            "total_images": total_images,
+            "engine": engine,
+        }

@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, UploadFile
-from fastapi.responses import FileResponse
 
 from ..errors import UserInputError
 from ..ocr.factory import get_ocr_backend
 from ..services.ocr_service import extract_text_from_pdf, make_selectable_pdf
+from ..utils.responses import job_file_response
 from ..utils.validation import display_name, read_pdf_upload, validate_ocr_language
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
@@ -45,7 +45,7 @@ async def ocr_make_selectable(
     pdf_path = await make_selectable_pdf(
         data, file.filename, language=language, backend_name=backend
     )
-    return FileResponse(
+    return job_file_response(
         pdf_path,
         media_type="application/pdf",
         filename=f"selectable_{Path(display_name(file.filename)).stem}.pdf",

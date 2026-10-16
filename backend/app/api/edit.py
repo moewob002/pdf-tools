@@ -2,10 +2,10 @@ import base64
 import io
 
 from fastapi import APIRouter, File, Form, UploadFile
-from fastapi.responses import FileResponse
 
 from ..errors import UserInputError
 from ..services.edit_service import split_pdf, merge_pdfs, merge_custom_pages, delete_pages, get_pdf_info
+from ..utils.responses import job_file_response
 from ..utils.validation import parse_page_order, read_pdf_upload, validate_dpi
 
 router = APIRouter(prefix="/api/edit", tags=["edit"])
@@ -18,7 +18,7 @@ async def split_pdf_endpoint(
 ):
     data = await read_pdf_upload(file)
     zip_path = await split_pdf(data, file.filename, pages)
-    return FileResponse(
+    return job_file_response(
         zip_path,
         media_type="application/zip",
         filename="split_pages.zip",
@@ -38,7 +38,7 @@ async def merge_pdfs_endpoint(
         file_data.append((data, f.filename))
 
     pdf_path = await merge_pdfs(file_data)
-    return FileResponse(
+    return job_file_response(
         pdf_path,
         media_type="application/pdf",
         filename="merged.pdf",
@@ -58,7 +58,7 @@ async def merge_custom_endpoint(
         file_data.append((data, f.filename))
 
     pdf_path = await merge_custom_pages(file_data, order)
-    return FileResponse(
+    return job_file_response(
         pdf_path,
         media_type="application/pdf",
         filename="merged.pdf",
@@ -72,7 +72,7 @@ async def delete_pages_endpoint(
 ):
     data = await read_pdf_upload(file)
     pdf_path = await delete_pages(data, file.filename, pages)
-    return FileResponse(
+    return job_file_response(
         pdf_path,
         media_type="application/pdf",
         filename="removed_pages.pdf",

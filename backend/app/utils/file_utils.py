@@ -1,10 +1,17 @@
-import os
-import uuid
+import logging
+import re
 import shutil
-from pathlib import Path
+import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Iterator
 
-from ..config import TEMP_DIR, FILE_TTL
+from ..config import FILE_TTL, TEMP_DIR
+
+logger = logging.getLogger(__name__)
+
+_SAFE_SUFFIX = re.compile(r"^\.[A-Za-z0-9]{1,8}$")
 
 
 def create_temp_dir(prefix: str = "job") -> Path:
@@ -14,8 +21,34 @@ def create_temp_dir(prefix: str = "job") -> Path:
     return job_dir
 
 
+@contextmanager
+def temp_job(prefix: str = "job") -> Iterator[Path]:
+    """Create a job directory that is removed if processing fails.
+
+    On success the directory is kept so the route can stream the result; the route
+    then removes it after the response with remove_job_dir().
+    """
+    job_dir = create_temp_dir(prefix)
+    try:
+        yield job_dir
+    except BaseException:
+        remove_job_dir(job_dir)
+        raise
+
+
+def remove_job_dir(job_dir: Path) -> None:
+    """Delete a job directory, refusing anything that is not a direct child of TEMP_DIR."""
+    job_dir = Path(job_dir)
+    if job_dir.resolve().parent != TEMP_DIR.resolve():
+        logger.warning("Refusing to remove non-job directory %s", job_dir)
+        return
+    shutil.rmtree(job_dir, ignore_errors=True)
+
+
 def save_upload(file_bytes: bytes, filename: str, dest_dir: Path) -> Path:
-    ext = Path(filename).suffix or ".pdf"
+    ext = Path(filename).suffix
+    if not _SAFE_SUFFIX.match(ext):
+        ext = ".pdf"
     safe_name = f"{uuid.uuid4().hex[:8]}{ext}"
     file_path = dest_dir / safe_name
     file_path.write_bytes(file_bytes)
@@ -36,7 +69,3 @@ def cleanup_old_files():
             mtime = datetime.fromtimestamp(item.stat().st_mtime)
             if mtime < cutoff:
                 item.unlink(missing_ok=True)
-
-
-def get_file_size(file_bytes: bytes) -> int:
-    return len(file_bytes)
