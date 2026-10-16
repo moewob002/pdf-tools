@@ -46,9 +46,6 @@ const navLinks = [
 ];
 
 function isActive(path) {
-  if (path === "/edit") {
-    return route.path.startsWith("/edit");
-  }
-  return route.path === path;
+  return route.path === path || route.path.startsWith(path + "/");
 }
 </script>
