@@ -97,6 +97,8 @@
 <script setup>
 import { ref, computed, defineAsyncComponent } from "vue";
 import api from "../api";
+import { loadThumbnails } from "../api/thumbnails";
+import { getErrorMessage } from "../utils/errors";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
@@ -130,14 +132,13 @@ function openPreview(page, title) {
 async function onFileChange(f) {
   files.value = f;
   preview.value = [];
+  error.value = "";
   if (f.length > 0) {
     try {
-      const form = new FormData();
-      form.append("file", f[0]);
-      form.append("dpi", "72");
-      const res = await api.post("/edit/thumbnails", form);
-      preview.value = res.data.pages;
-    } catch (_) {}
+      preview.value = await loadThumbnails(f[0], 72);
+    } catch (e) {
+      error.value = await getErrorMessage(e, "Failed to load preview");
+    }
   }
 }
 
@@ -153,7 +154,7 @@ async function convert() {
     resultBlob.value = res.data;
     pageCount.value = preview.value.length || 0;
   } catch (e) {
-    error.value = e.response?.data?.detail || "Conversion failed";
+    error.value = await getErrorMessage(e, "Conversion failed");
   } finally {
     loading.value = false;
   }

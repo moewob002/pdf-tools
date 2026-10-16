@@ -70,6 +70,9 @@
 <script setup>
 import { ref, defineAsyncComponent } from "vue";
 import api from "../api";
+import { loadThumbnails } from "../api/thumbnails";
+import { getErrorMessage } from "../utils/errors";
+import { rangesFromPages } from "../utils/pages";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ProcessingSpinner from "../components/ProcessingSpinner.vue";
@@ -90,43 +93,17 @@ const pageGrid = ref(null);
 const resultBlob = ref(null);
 const pagesSelected = ref(0);
 
-async function loadThumbnails(file) {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("dpi", "100");
-  const res = await api.post("/edit/thumbnails", form);
-  return res.data.pages;
-}
-
-function rangesFromPages(pages) {
-  if (pages.length === 0) return "";
-  const sorted = [...pages].sort((a, b) => a - b);
-  const ranges = [];
-  let start = sorted[0];
-  let end = sorted[0];
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === end + 1) {
-      end = sorted[i];
-    } else {
-      ranges.push(start === end ? `${start}` : `${start}-${end}`);
-      start = sorted[i];
-      end = sorted[i];
-    }
-  }
-  ranges.push(start === end ? `${start}` : `${start}-${end}`);
-  return ranges.join(",");
-}
-
 async function onFileChange(f) {
   files.value = f;
   pageRanges.value = "";
   thumbnails.value = [];
+  error.value = "";
   if (f.length > 0) {
     previewLoading.value = true;
     try {
       thumbnails.value = await loadThumbnails(f[0]);
     } catch (e) {
-      error.value = "Failed to load preview";
+      error.value = await getErrorMessage(e, "Failed to load preview");
     } finally {
       previewLoading.value = false;
     }
@@ -148,7 +125,7 @@ async function splitPdf() {
     const res = await api.post("/edit/split", form, { responseType: "blob" });
     resultBlob.value = res.data;
   } catch (e) {
-    error.value = e.response?.data?.detail || "Split failed";
+    error.value = await getErrorMessage(e, "Split failed");
   } finally {
     loading.value = false;
   }

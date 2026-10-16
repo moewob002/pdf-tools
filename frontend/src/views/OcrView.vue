@@ -152,6 +152,8 @@
 <script setup>
 import { ref, computed, defineAsyncComponent } from "vue";
 import api from "../api";
+import { loadThumbnails } from "../api/thumbnails";
+import { getErrorMessage } from "../utils/errors";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
@@ -192,14 +194,13 @@ async function onOcrFileChange(files) {
   ocrThumbnails.value = [];
   result.value = null;
   selectableBlob.value = null;
+  error.value = "";
   if (files.length > 0) {
     try {
-      const form = new FormData();
-      form.append("file", files[0]);
-      form.append("dpi", "100");
-      const res = await api.post("/edit/thumbnails", form);
-      ocrThumbnails.value = res.data.pages;
-    } catch (_) {}
+      ocrThumbnails.value = await loadThumbnails(files[0]);
+    } catch (e) {
+      error.value = await getErrorMessage(e, "Failed to load preview");
+    }
   }
 }
 
@@ -214,7 +215,7 @@ async function extractText() {
     const res = await api.post("/ocr/extract-text", form);
     result.value = res.data;
   } catch (e) {
-    error.value = e.response?.data?.detail || "OCR failed";
+    error.value = await getErrorMessage(e, "OCR failed");
   } finally {
     extractLoading.value = false;
   }
@@ -233,7 +234,7 @@ async function makeSelectable() {
     selectableBlob.value = res.data;
     selectableBackend.value = res.headers["x-ocr-backend"] || "tesseract";
   } catch (e) {
-    error.value = e.response?.data?.detail || "Processing failed";
+    error.value = await getErrorMessage(e, "Processing failed");
   } finally {
     makeSelectableLoading.value = false;
   }

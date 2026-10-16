@@ -2,7 +2,7 @@
   <div
     class="border-2 border-dashed rounded-lg p-8 text-center transition-all relative"
     :class="[
-      isDragging ? 'border-indigo-500 bg-indigo-50 scale-[1.01]' : 'border-gray-300 hover:border-indigo-40',
+      isDragging ? 'border-indigo-500 bg-indigo-50 scale-[1.01]' : 'border-gray-300 hover:border-indigo-400',
       files.length > 0 ? 'border-solid bg-gray-50' : '',
     ]"
     @dragover.prevent="isDragging = true"
@@ -35,12 +35,13 @@
         </svg>
       </div>
       <div class="text-sm text-gray-600">
-        <label
-          class="cursor-pointer text-indigo-600 hover:text-indigo-500 font-medium"
+        <button
+          type="button"
+          class="cursor-pointer text-indigo-600 hover:text-indigo-500 font-medium underline-offset-2 hover:underline"
           @click="fileInput?.click()"
         >
           Click to upload
-        </label>
+        </button>
         or drag and drop
       </div>
       <p class="text-xs text-gray-500">
@@ -68,6 +69,7 @@
         </div>
         <button
           class="ml-3 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          :aria-label="`Remove ${file.name}`"
           @click="removeFile(i)"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -81,7 +83,7 @@
           class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
           @click="fileInput?.click()"
         >
-          + Add more files
+          {{ multiple ? "+ Add more files" : "Replace file" }}
         </button>
         <button
           class="text-xs text-gray-500 hover:text-gray-700"
@@ -91,11 +93,19 @@
         </button>
       </div>
     </div>
+
+    <ul v-if="rejected.length" class="mt-3 space-y-1 text-left" role="alert">
+      <li v-for="(item, i) in rejected" :key="i" class="text-xs text-red-700">
+        {{ item.file.name }} was not added: {{ item.reason }}
+      </li>
+    </ul>
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue";
+import { partitionFiles } from "../utils/files";
+import { formatSize } from "../utils/format";
 
 const props = defineProps({
   accept: { type: String, default: ".pdf" },
@@ -107,6 +117,7 @@ const props = defineProps({
 const emit = defineEmits(["update:files"]);
 
 const files = ref([]);
+const rejected = ref([]);
 const isDragging = ref(false);
 const fileInput = ref(null);
 
@@ -123,8 +134,12 @@ function handleFileSelect(e) {
 }
 
 function addFiles(newFiles) {
-  const maxSize = props.maxSizeMB * 1024 * 1024;
-  const filtered = newFiles.filter((f) => f.size <= maxSize);
+  const { accepted: filtered, rejected: skipped } = partitionFiles(newFiles, {
+    accept: props.accept,
+    maxBytes: props.maxSizeMB * 1024 * 1024,
+  });
+  rejected.value = skipped;
+  if (filtered.length === 0) return;
 
   if (props.multiple) {
     files.value = [...files.value, ...filtered];
@@ -139,14 +154,9 @@ function removeFile(index) {
   emit("update:files", files.value);
 }
 
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
 function clear() {
   files.value = [];
+  rejected.value = [];
   emit("update:files", []);
 }
 

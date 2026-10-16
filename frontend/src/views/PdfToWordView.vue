@@ -53,6 +53,7 @@
 <script setup>
 import { ref } from "vue";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
@@ -74,7 +75,7 @@ async function convert() {
     const res = await api.post("/convert/pdf-to-word", form, { responseType: "blob" });
     resultBlob.value = res.data;
   } catch (e) {
-    error.value = e.response?.data?.detail || "Conversion failed";
+    error.value = await getErrorMessage(e, "Conversion failed");
   } finally {
     loading.value = false;
   }

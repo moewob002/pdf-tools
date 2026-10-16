@@ -114,6 +114,8 @@
 <script setup>
 import { ref } from "vue";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
+import { formatSize } from "../utils/format";
 import FileUpload from "../components/FileUpload.vue";
 import DownloadButton from "../components/DownloadButton.vue";
 import ResultCard from "../components/ResultCard.vue";
@@ -132,12 +134,6 @@ const qualityOptions = [
   { value: "medium", label: "Balanced", desc: "300 dpi, print quality" },
   { value: "high", label: "High Quality", desc: "300 dpi, no subsampling" },
 ];
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
 
 async function compressPdf() {
   loading.value = true;
@@ -158,7 +154,7 @@ async function compressPdf() {
       engine: res.headers["x-engine"] || "unknown",
     };
   } catch (e) {
-    error.value = e.response?.data?.detail || "Compression failed";
+    error.value = await getErrorMessage(e, "Compression failed");
   } finally {
     loading.value = false;
   }
