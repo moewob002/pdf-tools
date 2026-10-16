@@ -191,6 +191,17 @@ class WordToPdfTests(ApiTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertGreaterEqual(samples.page_count(r.content), 1)
 
+    def test_multiple_paragraphs(self):
+        # Regression (FUN-18): a second paragraph failed with "Not enough horizontal space".
+        r = self.post_docx(samples.docx("First paragraph.", "Second paragraph.", "Third."))
+        self.assertEqual(r.status_code, 200, r.text)
+        from pypdf import PdfReader
+        import io
+
+        text = PdfReader(io.BytesIO(r.content)).pages[0].extract_text()
+        for expected in ("First paragraph.", "Second paragraph.", "Third."):
+            self.assertIn(expected, text)
+
 
 class OcrValidationTests(ApiTestCase):
     def test_unknown_language_rejected_without_leaking(self):

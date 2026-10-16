@@ -152,6 +152,7 @@ async def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
         ) from None
 
     from fpdf import FPDF
+    from fpdf.enums import XPos, YPos
     from fpdf.errors import FPDFUnicodeEncodingException
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -181,7 +182,9 @@ async def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
                 if pdf.pages_count == 0 or pdf.get_y() > 270:
                     pdf.add_page()
                 pdf.set_font("Helvetica", size=11)
-                pdf.multi_cell(0, 10, para.text)
+                # Return to the left margin on the next line; fpdf2's default leaves the
+                # cursor at the right edge, so a second paragraph had zero width.
+                pdf.multi_cell(0, 10, para.text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     except FPDFUnicodeEncodingException:
         raise UserInputError(
             "This document contains characters (for example non-Latin scripts or "
