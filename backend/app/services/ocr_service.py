@@ -2,7 +2,6 @@ from pathlib import Path
 import io
 
 from ..ocr.factory import get_ocr_backend
-from ..config import TEMP_DIR
 from ..utils.file_utils import remove_job_dir, save_upload, temp_job
 from ..utils.pdf_render import iter_page_images
 
@@ -45,7 +44,6 @@ def make_selectable_pdf(
 ) -> Path:
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
     from reportlab.lib.colors import Color
 
     with temp_job("ocr_selectable") as job_dir:
@@ -80,7 +78,6 @@ def make_selectable_pdf(
             for word_info in ocr_data:
                 x = word_info["x"] * scale
                 y_top = word_info["y"] * scale
-                w = word_info["width"] * scale
                 h = word_info["height"] * scale
                 text = word_info["text"]
 

@@ -1,4 +1,5 @@
 import io
+import logging
 import zipfile
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from pypdf import PdfReader, PdfWriter
 from ..errors import UserInputError
 from ..utils.file_utils import save_upload, temp_job
 from ..utils.pdf_render import iter_page_images
+
+logger = logging.getLogger(__name__)
 
 
 def pdf_to_images(file_bytes: bytes, filename: str, fmt: str = "png", dpi: int = 200) -> Path:
@@ -73,7 +76,6 @@ def _images_to_pdf(files: list[tuple[bytes, str]], job_dir: Path) -> Path:
 def pdf_to_word(file_bytes: bytes, filename: str) -> Path:
     from docx import Document
     from docx.shared import Inches, Pt
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     with temp_job("convert") as job_dir:
         pdf_path = save_upload(file_bytes, filename, job_dir)
@@ -96,21 +98,16 @@ def pdf_to_word(file_bytes: bytes, filename: str) -> Path:
                     if line:
                         doc.add_paragraph(line)
             else:
-                images = convert_from_bytes(
-                    page.extract_image_bytes() if hasattr(page, "extract_image_bytes") else b"",
-                    dpi=200,
-                ) if False else None
-
-                if not images:
-                    try:
-                        page_bytes = io.BytesIO()
-                        single_writer = PdfWriter()
-                        single_writer.add_page(page)
-                        single_writer.write(page_bytes)
-                        page_bytes.seek(0)
-                        images = convert_from_bytes(page_bytes.read(), dpi=200)
-                    except Exception:
-                        images = []
+                try:
+                    page_bytes = io.BytesIO()
+                    single_writer = PdfWriter()
+                    single_writer.add_page(page)
+                    single_writer.write(page_bytes)
+                    page_bytes.seek(0)
+                    images = convert_from_bytes(page_bytes.read(), dpi=200)
+                except Exception:
+                    logger.warning("Could not rasterise page %d for DOCX output", i + 1, exc_info=True)
+                    images = []
 
                 if images:
                     img_path = job_dir / f"page_{i + 1}.png"
@@ -163,7 +160,6 @@ def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=15)
 
-        has_images = False
         tmp_dir = job_dir / "tmp_img"
         tmp_dir.mkdir(exist_ok=True)
 
