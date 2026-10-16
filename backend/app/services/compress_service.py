@@ -211,7 +211,7 @@ def _compress_with_pikepdf(
         return False
 
 
-async def compress_pdf(
+def compress_pdf(
     file_bytes: bytes,
     filename: str,
     quality: str = "medium",

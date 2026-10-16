@@ -4,24 +4,21 @@ import io
 from ..ocr.factory import get_ocr_backend
 from ..config import TEMP_DIR
 from ..utils.file_utils import remove_job_dir, save_upload, temp_job
+from ..utils.pdf_render import iter_page_images
 
 
-async def extract_text_from_pdf(
+def extract_text_from_pdf(
     file_bytes: bytes,
     filename: str,
     language: str = "eng",
     backend_name: str | None = None,
 ) -> dict:
-    from pdf2image import convert_from_bytes
-
     with temp_job("ocr") as job_dir:
         pdf_path = save_upload(file_bytes, filename, job_dir)
 
-        images = convert_from_bytes(pdf_path.read_bytes(), dpi=300)
-
         ocr = get_ocr_backend(backend_name)
         pages_text = []
-        for i, img in enumerate(images):
+        for i, img in enumerate(iter_page_images(pdf_path, dpi=300)):
             img_path = job_dir / f"page_{i + 1}.png"
             img.save(img_path, "PNG")
             text = ocr.extract_text(img_path, language=language)
@@ -40,13 +37,12 @@ async def extract_text_from_pdf(
     }
 
 
-async def make_selectable_pdf(
+def make_selectable_pdf(
     file_bytes: bytes,
     filename: str,
     language: str = "eng",
     backend_name: str | None = None,
 ) -> Path:
-    from pdf2image import convert_from_bytes
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4
@@ -56,14 +52,13 @@ async def make_selectable_pdf(
         pdf_path = save_upload(file_bytes, filename, job_dir)
 
         dpi = 300
-        images = convert_from_bytes(pdf_path.read_bytes(), dpi=dpi)
         original_reader = PdfReader(io.BytesIO(file_bytes))
 
         ocr = get_ocr_backend(backend_name)
 
         writer = PdfWriter()
 
-        for i, img in enumerate(images):
+        for i, img in enumerate(iter_page_images(pdf_path, dpi=dpi)):
             img_path = job_dir / f"page_{i + 1}.png"
             img.save(img_path, "PNG")
 

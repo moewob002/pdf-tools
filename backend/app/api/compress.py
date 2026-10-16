@@ -2,6 +2,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from ..errors import UserInputError
 from ..services.compress_service import compress_pdf
+from ..utils.processing import run_processing
 from ..utils.responses import job_file_response
 from ..utils.validation import display_name, read_pdf_upload
 
@@ -18,7 +19,7 @@ async def compress_pdf_endpoint(
 
     data = await read_pdf_upload(file)
 
-    pdf_path, stats = await compress_pdf(data, file.filename, quality)
+    pdf_path, stats = await run_processing(compress_pdf, data, file.filename, quality)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",

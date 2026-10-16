@@ -8,6 +8,7 @@ from ..services.convert_service import (
     pdf_to_word,
     word_to_pdf,
 )
+from ..utils.processing import run_processing
 from ..utils.responses import job_file_response
 from ..utils.validation import (
     DOCX_EXTENSIONS,
@@ -29,7 +30,7 @@ async def convert_pdf_to_image(
 ):
     validate_dpi(dpi)
     data = await read_pdf_upload(file)
-    zip_path = await pdf_to_images(data, file.filename, fmt=format, dpi=dpi)
+    zip_path = await run_processing(pdf_to_images, data, file.filename, fmt=format, dpi=dpi)
     return job_file_response(
         zip_path,
         media_type="application/zip",
@@ -46,7 +47,7 @@ async def convert_image_to_pdf(
         data = await read_image_upload(f)
         file_data.append((data, f.filename))
 
-    pdf_path = await images_to_pdf(file_data)
+    pdf_path = await run_processing(images_to_pdf, file_data)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",
@@ -59,7 +60,7 @@ async def convert_pdf_to_word(
     file: UploadFile = File(...),
 ):
     data = await read_pdf_upload(file)
-    docx_path = await pdf_to_word(data, file.filename)
+    docx_path = await run_processing(pdf_to_word, data, file.filename)
     return job_file_response(
         docx_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -72,7 +73,7 @@ async def convert_word_to_pdf(
     file: UploadFile = File(...),
 ):
     data = await read_upload(file, DOCX_EXTENSIONS, "Word document (.docx)")
-    pdf_path = await word_to_pdf(data, file.filename)
+    pdf_path = await run_processing(word_to_pdf, data, file.filename)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",

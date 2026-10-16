@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
@@ -54,7 +55,7 @@ async def read_upload(file: UploadFile, extensions: tuple[str, ...], kind: str) 
 
 async def read_pdf_upload(file: UploadFile) -> bytes:
     data = await read_upload(file, PDF_EXTENSIONS, "PDF file")
-    ensure_readable_pdf(data)
+    await run_in_threadpool(ensure_readable_pdf, data)
     return data
 
 
@@ -67,7 +68,7 @@ async def read_image_upload(file: UploadFile) -> bytes:
     data = await file.read()
     if len(data) > MAX_FILE_SIZE:
         raise UserInputError(_too_large_message(name), status_code=413)
-    ensure_readable_image(data)
+    await run_in_threadpool(ensure_readable_image, data)
     return data
 
 

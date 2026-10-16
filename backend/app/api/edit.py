@@ -1,10 +1,15 @@
-import base64
-import io
-
 from fastapi import APIRouter, File, Form, UploadFile
 
 from ..errors import UserInputError
-from ..services.edit_service import split_pdf, merge_pdfs, merge_custom_pages, delete_pages, get_pdf_info
+from ..services.edit_service import (
+    delete_pages,
+    get_pdf_info,
+    merge_custom_pages,
+    merge_pdfs,
+    render_thumbnails,
+    split_pdf,
+)
+from ..utils.processing import run_processing
 from ..utils.responses import job_file_response
 from ..utils.validation import parse_page_order, read_pdf_upload, validate_dpi
 
@@ -17,7 +22,7 @@ async def split_pdf_endpoint(
     pages: str = Form(..., description='Page ranges, e.g. "1-3,5,7-9"'),
 ):
     data = await read_pdf_upload(file)
-    zip_path = await split_pdf(data, file.filename, pages)
+    zip_path = await run_processing(split_pdf, data, file.filename, pages)
     return job_file_response(
         zip_path,
         media_type="application/zip",
@@ -37,7 +42,7 @@ async def merge_pdfs_endpoint(
         data = await read_pdf_upload(f)
         file_data.append((data, f.filename))
 
-    pdf_path = await merge_pdfs(file_data)
+    pdf_path = await run_processing(merge_pdfs, file_data)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",
@@ -57,7 +62,7 @@ async def merge_custom_endpoint(
         data = await read_pdf_upload(f)
         file_data.append((data, f.filename))
 
-    pdf_path = await merge_custom_pages(file_data, order)
+    pdf_path = await run_processing(merge_custom_pages, file_data, order)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",
@@ -71,7 +76,7 @@ async def delete_pages_endpoint(
     pages: str = Form(..., description='Pages to remove, e.g. "2,4,6-8"'),
 ):
     data = await read_pdf_upload(file)
-    pdf_path = await delete_pages(data, file.filename, pages)
+    pdf_path = await run_processing(delete_pages, data, file.filename, pages)
     return job_file_response(
         pdf_path,
         media_type="application/pdf",
@@ -84,7 +89,7 @@ async def pdf_info_endpoint(
     file: UploadFile = File(...),
 ):
     data = await read_pdf_upload(file)
-    info = await get_pdf_info(data)
+    info = await run_processing(get_pdf_info, data)
     return info
 
 
@@ -93,27 +98,6 @@ async def pdf_thumbnails(
     file: UploadFile = File(...),
     dpi: int = Form(100),
 ):
-    from pdf2image import convert_from_bytes
-
     validate_dpi(dpi)
     data = await read_pdf_upload(file)
-    images = convert_from_bytes(data, dpi=dpi, fmt="JPEG")
-
-    thumbnails = []
-    for i, img in enumerate(images):
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=75)
-        buf.seek(0)
-        thumbnails.append({
-            "page": i + 1,
-            "image": buf.getvalue(),
-        })
-
-    result = {
-        "total_pages": len(thumbnails),
-        "pages": [
-            {"page": t["page"], "image": base64.b64encode(t["image"]).decode()}
-            for t in thumbnails
-        ],
-    }
-    return result
+    return await run_processing(render_thumbnails, data, dpi)

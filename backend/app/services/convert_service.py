@@ -8,13 +8,13 @@ from pypdf import PdfReader, PdfWriter
 
 from ..errors import UserInputError
 from ..utils.file_utils import save_upload, temp_job
+from ..utils.pdf_render import iter_page_images
 
 
-async def pdf_to_images(file_bytes: bytes, filename: str, fmt: str = "png", dpi: int = 200) -> Path:
+def pdf_to_images(file_bytes: bytes, filename: str, fmt: str = "png", dpi: int = 200) -> Path:
     with temp_job("convert") as job_dir:
         pdf_path = save_upload(file_bytes, filename, job_dir)
 
-        images = convert_from_bytes(pdf_path.read_bytes(), dpi=dpi)
         output_dir = job_dir / "output"
         output_dir.mkdir(exist_ok=True)
 
@@ -25,7 +25,7 @@ async def pdf_to_images(file_bytes: bytes, filename: str, fmt: str = "png", dpi:
             ext = "png"
 
         saved = []
-        for i, img in enumerate(images):
+        for i, img in enumerate(iter_page_images(pdf_path, dpi=dpi)):
             out_path = output_dir / f"page_{i + 1}.{ext}"
             img.save(out_path, pillow_fmt)
             saved.append(out_path)
@@ -38,7 +38,7 @@ async def pdf_to_images(file_bytes: bytes, filename: str, fmt: str = "png", dpi:
         return zip_path
 
 
-async def images_to_pdf(files: list[tuple[bytes, str]], job_dir: Path | None = None) -> Path:
+def images_to_pdf(files: list[tuple[bytes, str]], job_dir: Path | None = None) -> Path:
     if job_dir is None:
         with temp_job("convert") as job_dir:
             return _images_to_pdf(files, job_dir)
@@ -70,7 +70,7 @@ def _images_to_pdf(files: list[tuple[bytes, str]], job_dir: Path) -> Path:
     return output_path
 
 
-async def pdf_to_word(file_bytes: bytes, filename: str) -> Path:
+def pdf_to_word(file_bytes: bytes, filename: str) -> Path:
     from docx import Document
     from docx.shared import Inches, Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -144,7 +144,7 @@ async def pdf_to_word(file_bytes: bytes, filename: str) -> Path:
         return output_path
 
 
-async def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
+def word_to_pdf(file_bytes: bytes, filename: str) -> Path:
     from docx import Document
 
     with temp_job("convert") as job_dir:

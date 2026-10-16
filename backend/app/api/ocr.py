@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 from ..errors import UserInputError
 from ..ocr.factory import get_ocr_backend
 from ..services.ocr_service import extract_text_from_pdf, make_selectable_pdf
+from ..utils.processing import run_processing
 from ..utils.responses import job_file_response
 from ..utils.validation import display_name, read_pdf_upload, validate_ocr_language
 
@@ -28,7 +29,7 @@ async def ocr_extract_text(
     _validate_ocr_options(language, backend)
     data = await read_pdf_upload(file)
 
-    return await extract_text_from_pdf(
+    return await run_processing(extract_text_from_pdf, 
         data, file.filename, language=language, backend_name=backend
     )
 
@@ -42,7 +43,7 @@ async def ocr_make_selectable(
     _validate_ocr_options(language, backend)
     data = await read_pdf_upload(file)
 
-    pdf_path = await make_selectable_pdf(
+    pdf_path = await run_processing(make_selectable_pdf, 
         data, file.filename, language=language, backend_name=backend
     )
     return job_file_response(

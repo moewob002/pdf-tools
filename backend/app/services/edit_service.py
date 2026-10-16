@@ -1,3 +1,4 @@
+import base64
 import io
 import zipfile
 from pathlib import Path
@@ -5,11 +6,12 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 from ..errors import UserInputError
-from ..utils.file_utils import save_upload, temp_job
+from ..utils.file_utils import remove_job_dir, save_upload, temp_job
+from ..utils.pdf_render import iter_page_images
 from ..utils.validation import parse_page_ranges
 
 
-async def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
+def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
     with temp_job("split") as job_dir:
         pdf_path = save_upload(file_bytes, filename, job_dir)
 
@@ -33,7 +35,7 @@ async def split_pdf(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
         return zip_path
 
 
-async def merge_pdfs(files: list[tuple[bytes, str]]) -> Path:
+def merge_pdfs(files: list[tuple[bytes, str]]) -> Path:
     with temp_job("merge") as job_dir:
         writer = PdfWriter()
 
@@ -49,7 +51,7 @@ async def merge_pdfs(files: list[tuple[bytes, str]]) -> Path:
         return output_path
 
 
-async def merge_custom_pages(
+def merge_custom_pages(
     files: list[tuple[bytes, str]],
     page_order: list[dict],
 ) -> Path:
@@ -78,7 +80,7 @@ async def merge_custom_pages(
         return output_path
 
 
-async def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
+def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Path:
     with temp_job("delete") as job_dir:
         pdf_path = save_upload(file_bytes, filename, job_dir)
 
@@ -99,9 +101,22 @@ async def delete_pages(file_bytes: bytes, filename: str, page_ranges: str) -> Pa
         return output_path
 
 
-async def get_pdf_info(file_bytes: bytes) -> dict:
+def get_pdf_info(file_bytes: bytes) -> dict:
     reader = PdfReader(io.BytesIO(file_bytes))
     return {
         "total_pages": len(reader.pages),
         "metadata": reader.metadata,
     }
+
+
+def render_thumbnails(file_bytes: bytes, dpi: int) -> dict:
+    """JPEG thumbnails of every page, base64-encoded for the JSON response."""
+    with temp_job("thumbs") as job_dir:
+        pdf_path = save_upload(file_bytes, "upload.pdf", job_dir)
+        pages = []
+        for i, img in enumerate(iter_page_images(pdf_path, dpi=dpi, fmt="JPEG")):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=75)
+            pages.append({"page": i + 1, "image": base64.b64encode(buf.getvalue()).decode()})
+    remove_job_dir(job_dir)
+    return {"total_pages": len(pages), "pages": pages}
