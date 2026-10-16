@@ -86,3 +86,10 @@ test("the no-JS dark fallback matches the dark theme", () => {
   }
 });
 
+test("merge source label colours keep white text at AA", () => {
+  const vue = readFileSync(new URL("../src/components/MergeReorder.vue", import.meta.url), "utf8");
+  const list = vue.slice(vue.indexOf("const FILE_COLORS = ["), vue.indexOf("];", vue.indexOf("const FILE_COLORS = [")));
+  const colours = [...list.matchAll(/"#([0-9a-fA-F]{6})"/g)].map((m) => m[1].match(/../g).map((h) => parseInt(h, 16)));
+  assert.ok(colours.length >= 6);
+  for (const colour of colours) assert.ok(ratio([255, 255, 255], colour) >= 4.5, `#${colour} fails`);
+});

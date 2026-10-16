@@ -128,3 +128,11 @@ test("retryOnRateLimit gives up and does not retry other errors", async () => {
   );
   assert.equal(calls, 1);
 });
+
+import { previewStatus } from "../src/utils/previewStatus.js";
+
+test("previewStatus never reports an unreadable file as ready", () => {
+  assert.deepEqual(previewStatus({ loading: true, failed: false, pageCount: 0 }), { state: "loading", label: "Reading…" });
+  assert.deepEqual(previewStatus({ loading: false, failed: true, pageCount: 0 }), { state: "error", label: "Can't read" });
+  assert.deepEqual(previewStatus({ loading: false, failed: false, pageCount: 3 }), { state: "ready", label: "3 pages" });
+});
